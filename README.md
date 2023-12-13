@@ -4,7 +4,7 @@ Proteomic Modification Intensity Calculator
 This Python script provides a simple user interface to perform proteome analysis based on the output file from Proteome Discoverer. It allows users to select a Proteome Discoverer output file, enter a UniProt ID, and analyze amino acid modifications within the specified range.
 
 # Directions to Usage
-download from Release tab the latest EXE file or follow instructions bellow to use as python script
+download from Release tab (https://github.com/benfass/ProteoMIC/releases/tag/v1.0) the latest EXE file or follow instructions bellow to use as python script
 
 # Requirements
 Python 3.x
