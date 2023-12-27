@@ -72,12 +72,14 @@ class UI:
         self.root.minsize(600,200)
 
         self.fasta = ""
+        self.file_output_path = ""
         self.input_df = pd.DataFrame()
 
         self.instruction_frame = tk.Frame(self.root)
         self.instruction_frame.grid(sticky = "W",row=1,column=0, padx=10)
         self.input_prog_var = tk.StringVar()
         self.input_prog_var.set("Proteom discoverer")
+        self.input_prog_selection = "Proteom discoverer"
         self.input_prog_frame = tk.Frame(self.instruction_frame)
         self.input_prog_frame.grid(row=2, column=0, columnspan= 3, sticky = "W")
 
@@ -104,7 +106,20 @@ class UI:
         ttk.Label(self.instruction_frame,text="Select AA to be checked for modifications:").grid(sticky = "W",row=6,column=0,pady=5)
         self.aa_selection = tk.StringVar()
         tk.OptionMenu(self.instruction_frame, self.aa_selection , *AMINO_ACID_LIST).grid(sticky = "W",row=6,column=2,padx=3)
-        tk.Button(self.instruction_frame,text="Run analysis", command = self.run_analysis_per_program).grid(sticky = "W",row=7,column=0)
+
+        self.select_output_file_button_text = tk.StringVar()
+        self.select_output_file_button_text.set("Select file")
+        ttk.Label(self.instruction_frame,text="Select location for output file(optional)").grid(sticky = "W",row=7,column=0,pady=5)
+        self.select_output_path_button = tk.Button(self.instruction_frame,textvariable=self.select_output_file_button_text ,command=self.select_output_path)
+        self.select_output_path_button.grid(sticky = "W",row=7,column=2,padx=5)
+
+        tk.Button(self.instruction_frame,text="Run analysis", command = self.run_analysis_per_program).grid(sticky = "W",row=8,column=0)
+
+    def select_output_path(self):
+        self.file_output_path = filedialog.askdirectory()
+        self.select_output_file_button_text.set(self.file_output_path)
+        self.select_output_path_button.configure(bg="green")
+        pass
 
     def chenge_input_prog(self):
         selection = self.input_prog_var.get()
@@ -125,8 +140,16 @@ class UI:
         elif ".tsv" in self.file_path_input:
             self.input_df = pd.read_csv(self.file_path_input, sep='\t', header=0)
         if self.input_prog_selection == "Metamorpheus":
-            self.metamorpheus_input_df_prework()
-        self.input_df.dropna(subset = ['Sequence'], inplace=True)
+            try:
+                self.metamorpheus_input_df_prework()
+            except KeyError:
+                messagebox.showerror(title="bad input file", message="please check that file output matches the selected program \nand that no changes made to file post creation")
+                return
+        try:
+            self.input_df.dropna(subset = ['Sequence'], inplace=True)
+        except KeyError:
+            messagebox.showerror(title="bad input file", message="please check that file output matches the selected program \nand that no changes made to file post creation")
+            return
         self.select_file_button_text.set(self.file_path_input)
         self.file_select_button.configure(bg="green")
 
@@ -181,17 +204,18 @@ class UI:
 
     def run_analysis_per_program(self):
         if self.input_prog_selection == "Proteom discoverer":
-            self.run_analysis(self.input_df)
+            output_path = self.run_analysis(self.input_df)
         elif self.input_prog_selection == "Metamorpheus":
             for sample in self.input_df["File Name"].unique().tolist():
-                self.run_analysis(df_to_analyze = self.input_df[self.input_df["File Name"]==sample],sample_name = "_"+sample)
+                output_path = self.run_analysis(df_to_analyze = self.input_df[self.input_df["File Name"]==sample],sample_name = "_"+sample)
+        messagebox.showinfo(title="file saved!", message="output file saved sucsessfully at:\n{0}".format(output_path))
             
 
     def run_analysis(self , df_to_analyze, sample_name = ""):
         if not self.fasta or df_to_analyze.empty or self.aa_selection.get() == "":
             messagebox.showerror(title="error running analisys", message="please fill all parameters and try again")
             return
-        df_to_analyze = df_to_analyze[df_to_analyze["Protein Group Accessions"].str.contains(self.uniprot_id)]
+        df_to_analyze = df_to_analyze[df_to_analyze["Protein Group Accessions"].str.contains(self.uniprot_id,na=False)]
         self.aa_to_analyise = self.aa_selection.get()
         df_to_analyze['Sequence_upper'] =  df_to_analyze['Sequence'].str.upper()
         filtered_df = df_to_analyze[df_to_analyze["Sequence_upper"].str.contains(self.aa_to_analyise)]
@@ -303,11 +327,17 @@ class UI:
             ordered_columns.append("intensity_pecentage_" + mod + "[%]")
 
         df_to_save = df_to_save.reindex(columns=ordered_columns)
-
-        file_name, file_extension = os.path.splitext(self.file_path_input)
         df_to_save.sort_values(by=["AA number"],inplace=True)
-        df_to_save.to_csv(file_name + sample_name + "_output.csv", index = False)
-        messagebox.showinfo(title="file saved!", message="output file saved sucsessfully at:\n{0}".format(file_name+ "_output.csv"))
+
+        if self.file_output_path == "":
+            file_name, file_extension = os.path.splitext(self.file_path_input)
+            df_to_save.to_csv(file_name + sample_name + "_" +self.uniprot_id + "_output.csv", index = False)
+            return os.path.dirname(file_name + sample_name + "_" +self.uniprot_id + "_output.csv")
+        else:
+            file_name = os.path.basename(self.file_path_input)
+            df_to_save.to_csv(self.file_output_path +"/" + os.path.splitext(file_name)[0] + sample_name + "_" +self.uniprot_id + "_output.csv", index = False)
+            return self.file_output_path
+        
 
 
 
