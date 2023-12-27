@@ -9,6 +9,10 @@ import pandas as pd
 import numpy as np
 import requests
 
+# TODO:
+# in case FASTA fails to load from uniprot - add option to attach FASTA manually
+
+
 AMINO_ACID_LIST = ['A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'V', 'W', 'Y']
 
 def fetch_fasta(uniprot_id):
@@ -52,27 +56,41 @@ class UI:
 
         self.instruction_frame = tk.Frame(self.root)
         self.instruction_frame.grid(sticky = "W",row=1,column=0, padx=10)
-        ttk.Label(self.instruction_frame,text="Please select Proteome Discoverer output file:").grid(sticky = "W",row=1,column=0)
+        self.input_prog_var = tk.StringVar()
+        self.input_prog_frame = tk.Frame(self.instruction_frame)
+        self.input_prog_frame.grid(row=2, column=0, columnspan= 3, sticky = "W")
+
+        ttk.Label(self.input_prog_frame, text= "Please select program used to create input file: ").grid(row=0, column=0, padx=2)
+        ttk.Radiobutton(self.input_prog_frame,text="Proteom discoverer", variable=self.input_prog_var, value= "Proteom discoverer", command=self.chenge_input_prog).grid(sticky = "W",row=0,column=1, padx=2)
+        ttk.Radiobutton(self.input_prog_frame,text="Metamorpheus", variable=self.input_prog_var, value= "Metamorpheus", command=self.chenge_input_prog).grid(sticky = "W",row=0,column=2, padx=2)
+
+
+        ttk.Label(self.instruction_frame,text="Please select Proteome Discoverer output file:").grid(sticky = "W",row=3,column=0)
         self.select_file_button_text = tk.StringVar()
         self.select_file_button_text.set("please select file")
         self.file_select_button = tk.Button(self.instruction_frame,textvariable=self.select_file_button_text,command=self.select_file)
-        self.file_select_button.grid(sticky = "W",row=1,column=2)
+        self.file_select_button.grid(sticky = "W",row=3,column=2)
 
-        ttk.Label(self.instruction_frame,text="Please enter UNIPROT ID:").grid(sticky = "W",row=2,column=0)
+        ttk.Label(self.instruction_frame,text="Please enter UNIPROT ID:").grid(sticky = "W",row=4,column=0)
         self.select_FASTA_result_text = tk.StringVar()
         self.select_FASTA_button_text = tk.StringVar()
         self.select_FASTA_button_text.set("Get FASTA file")
 
-        tk.Entry(self.instruction_frame, textvariable=self.select_FASTA_result_text).grid(sticky = "W",row=2,column=1)
+        tk.Entry(self.instruction_frame, textvariable=self.select_FASTA_result_text).grid(sticky = "W",row=4,column=1)
         self.get_fasta_button = tk.Button(self.instruction_frame,textvariable=self.select_FASTA_button_text ,command=self.select_fasta_file)
-        self.get_fasta_button.grid(sticky = "W",row=2,column=2)
+        self.get_fasta_button.grid(sticky = "W",row=4,column=2)
 
-        ttk.Label(self.instruction_frame,text="Please select AA to be checked for modifications:").grid(sticky = "W",row=4,column=0)
+        ttk.Label(self.instruction_frame,text="Please select AA to be checked for modifications:").grid(sticky = "W",row=6,column=0)
         self.aa_selection = tk.StringVar()
-        tk.OptionMenu(self.instruction_frame, self.aa_selection , *AMINO_ACID_LIST).grid(sticky = "W",row=4,column=2)
-        tk.Button(self.instruction_frame,text="Run analysis", command = self.run_analysis).grid(sticky = "W",row=5,column=0)
+        tk.OptionMenu(self.instruction_frame, self.aa_selection , *AMINO_ACID_LIST).grid(sticky = "W",row=6,column=2)
+        tk.Button(self.instruction_frame,text="Run analysis", command = self.run_analysis).grid(sticky = "W",row=7,column=0)
 
-    
+    def chenge_input_prog(self):
+        selection = self.input_prog_var.get()
+        if selection == "Proteom discoverer":
+            self.input_prog_selection = "Proteom discoverer"
+
+
     def select_file(self):
         self.file_path_input = filedialog.askopenfilename()
         if self.file_path_input == "":
