@@ -108,7 +108,7 @@ class UI:
         tk.OptionMenu(self.instruction_frame, self.aa_selection , *AMINO_ACID_LIST).grid(sticky = "W",row=6,column=2,padx=3)
 
         self.select_output_file_button_text = tk.StringVar()
-        self.select_output_file_button_text.set("Select file")
+        self.select_output_file_button_text.set("Select folder")
         ttk.Label(self.instruction_frame,text="Select location for output file(optional)").grid(sticky = "W",row=7,column=0,pady=5)
         self.select_output_path_button = tk.Button(self.instruction_frame,textvariable=self.select_output_file_button_text ,command=self.select_output_path)
         self.select_output_path_button.grid(sticky = "W",row=7,column=2,padx=5)
