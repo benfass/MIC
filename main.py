@@ -113,7 +113,15 @@ class UI:
         self.select_output_path_button = tk.Button(self.instruction_frame,textvariable=self.select_output_file_button_text ,command=self.select_output_path)
         self.select_output_path_button.grid(sticky = "W",row=7,column=2,padx=5)
 
-        tk.Button(self.instruction_frame,text="Run analysis", command = self.run_analysis_per_program).grid(sticky = "W",row=8,column=0)
+        self.analysis_type_frame = tk.Frame(self.instruction_frame)
+        self.analysis_type_frame.grid(row=8, column=0, columnspan= 3, sticky = "W")
+        self.analasys_type_var = tk.StringVar()
+        ttk.Radiobutton(self.analysis_type_frame,text="All peptides", variable=self.analasys_type_var, value= "All peptides", command=self.chenge_analysis_type).grid(sticky = "W",row=8,column=1, padx=2)
+        ttk.Radiobutton(self.analysis_type_frame,text="Per peptide analysis", variable=self.analasys_type_var, value= "Per peptide analysis", command=self.chenge_analysis_type).grid(sticky = "W",row=8,column=2, padx=2)
+        self.analasys_type_var.set("All peptides")
+        self.analasys_type_selection = "All peptides"
+
+        tk.Button(self.instruction_frame,text="Run analysis", command = self.run_analysis_per_program).grid(sticky = "W",row=9,column=0)
 
     def select_output_path(self):
         self.file_output_path = filedialog.askdirectory()
@@ -128,6 +136,12 @@ class UI:
         elif selection == "Metamorpheus":
             self.input_prog_selection = "Metamorpheus"
 
+    def chenge_analysis_type(self):
+        selection = self.analasys_type_var.get()
+        if selection == "All peptides":
+            self.analasys_type_selection = "All peptides"
+        elif selection == "Per peptide analysis":
+            self.analasys_type_selection = "Per peptide analysis"
 
     def select_file(self):
         self.file_path_input = filedialog.askopenfilename()
@@ -169,9 +183,6 @@ class UI:
 
     def extract_sequence_and_modifications(self, value):
         # Use regular expressions to find matches
-        # sequence_match = re.search(r'([A-Za-z]+)', value)
-        
-
         # Join the sequence and modifications
         # sequence = sequence_match.group(1) if sequence_match else ""
         sequence = value
@@ -188,9 +199,7 @@ class UI:
                 legth_to_substrunct = legth_to_substrunct + modification_info.span()[1]-modification_info.span()[0]
                 continue
                 
-
         modifications_str = '; '.join(modifications) if modifications else ""
-
         return sequence, modifications_str
 
     def metamorpheus_input_df_prework(self):
@@ -210,6 +219,30 @@ class UI:
                 output_path = self.run_analysis(df_to_analyze = self.input_df[self.input_df["File Name"]==sample],sample_name = "_"+sample)
         messagebox.showinfo(title="file saved!", message="output file saved sucsessfully at:\n{0}".format(output_path))
             
+    def add_df_analasys_entry(self, aa_dict, aa, mod_dict, analysis_type, total_intensity, total_mod_intensity, df_to_save):
+        dict_to_append = {"location_in_FASTA": [aa], 
+            "total_peptides": aa_dict["total_peptides_covarage_w_repetitions"],
+            "peptide": analysis_type,
+            "total_unique_peptides": aa_dict["total_unique_peptides"],
+            "total_intensity":[total_intensity],
+            "peptides_with_no_modification":[aa_dict["no_modification"][analysis_type]],
+            "no_modification_intensity" : total_intensity - total_mod_intensity
+            }  
+        for mod in mod_dict:
+            dict_to_append["AA number"] = int(aa[2:])
+            aa_dict["percentage_" + mod] = 100*aa_dict["total_modification_" + mod][analysis_type]/aa_dict["total_peptides_covarage_w_repetitions"]
+            dict_to_append["peptides_with_" + mod] = aa_dict["total_modification_" + mod]
+            dict_to_append["percentage_of_" + mod + "modification[%]"] = round(aa_dict["percentage_" + mod],2)
+            dict_to_append["intensity_" + mod] = round(aa_dict["total_intensity_" + mod],2)
+            if total_intensity!= 0:
+                dict_to_append["intensity_pecentage_" + mod + "[%]"] = round(100*(dict_to_append["intensity_" + mod]/total_intensity),2)
+            else:
+                dict_to_append["intensity_pecentage_" + mod + "[%]"] = "NA"
+            
+            
+        entry = pd.DataFrame.from_dict(dict_to_append)
+        return pd.concat([df_to_save, entry], ignore_index=True)
+
 
     def run_analysis(self , df_to_analyze, sample_name = ""):
         if not self.fasta or df_to_analyze.empty or self.aa_selection.get() == "":
@@ -233,11 +266,7 @@ class UI:
         for key in mod_dict:
             mod_dict[key] = modification_df[modification_df["Modifications"].str.contains(key)]["Intensity"].sum()*(100/sum_of_inteseties)
         
-        # # total number of peptides found
-        # num_peptides_total = len(df_to_analyze['Sequence'].unique().tolist())
-        # total number of peptides containing selected AA
-        # num_peptides_aa_selection = len(filtered_df['Sequence'].unique().tolist())
-        
+
         # AA analysis
         selected_aa_dict = dict()
         selected_aa_locations = [m.start() for m in re.finditer(self.aa_to_analyise, self.fasta)]
@@ -251,7 +280,7 @@ class UI:
                 else:
                     selected_aa_dict[self.aa_to_analyise + "_" +str(match)] = {"unique_peptides": {peptide:(start,end)}}
         
-        df_cols=["AA number","location_in_FASTA", "total_peptides","total_unique_peptides","total_intensity","peptides_with_no_modification"]
+        df_cols=["AA number","location_in_FASTA", "peptide", "total_peptides","total_unique_peptides","total_intensity","peptides_with_no_modification"]
         for mod in mod_dict:
             df_cols.append("peptides_with_" + mod)
             df_cols.append("percentage_" + mod + "%")
@@ -259,57 +288,92 @@ class UI:
             df_cols.append("intensity_pecentage_" + mod)
 
         df_to_save = pd.DataFrame(columns = df_cols)
+        
 
         for aa in selected_aa_dict:
             selected_aa_dict[aa]["total_peptides_covarage_w_repetitions"] = len(df_to_analyze[df_to_analyze["Sequence_upper"].isin(selected_aa_dict[aa]["unique_peptides"].keys())])
             selected_aa_dict[aa]["total_unique_peptides"] = len(selected_aa_dict[aa]["unique_peptides"].keys())
             selected_aa_dict[aa]["total_intensity"] = sum(df_to_analyze[df_to_analyze["Sequence_upper"].isin(selected_aa_dict[aa]["unique_peptides"].keys())]["Intensity"].tolist())
             
-            
-            selected_aa_dict[aa]["no_modification"] = 0
+            # selected_aa_dict[aa]["no_modification"] = 0
             total_mod_amount = 0
             total_mod_intensity = 0
-            for mod in mod_dict:
-                mod_intensity = 0
-                selected_aa_dict[aa]["total_modification_" + mod] = 0
+            selected_aa_dict[aa]["no_modification"] = {}
+            
+            if self.analasys_type_selection == "All peptides":
+                for mod in mod_dict:
+                    mod_intensity = 0
+                    selected_aa_dict[aa]["total_modification_" + mod] = 0
+                    for peptide_iter in selected_aa_dict[aa]["unique_peptides"].keys():
+                        phrase_to_search = aa[0:1] + str( 1+ int(aa[2:]) - selected_aa_dict[aa]["unique_peptides"][peptide_iter][0]) + "(" + mod + ")"
+                        selected_aa_dict[aa]["total_modification_" + mod] += len(df_to_analyze[(df_to_analyze["Sequence_upper"] == peptide_iter) & (df_to_analyze["Modifications"].str.contains(phrase_to_search,na=False,regex=False))])
+                        mod_intensity += sum(df_to_analyze[(df_to_analyze["Sequence_upper"] == peptide_iter) & (df_to_analyze["Modifications"].str.contains(phrase_to_search,na=False,regex=False))]["Intensity"])
+                    total_mod_amount += selected_aa_dict[aa]["total_modification_" + mod]
+                    selected_aa_dict[aa]["total_intensity_" + mod] = mod_intensity
+                    total_mod_intensity += mod_intensity
+                selected_aa_dict[aa]["no_modification"] = selected_aa_dict[aa]["total_peptides_covarage_w_repetitions"] - total_mod_amount
+                
+                dict_to_append = {"location_in_FASTA": [aa], 
+                    "peptide": "All",
+                    "total_peptides": [selected_aa_dict[aa]["total_peptides_covarage_w_repetitions"]],
+                    "total_unique_peptides": [selected_aa_dict[aa]["total_unique_peptides"]],
+                    "total_intensity":[selected_aa_dict[aa]["total_intensity"]],
+                    "peptides_with_no_modification":[selected_aa_dict[aa]["no_modification"]],
+                    "no_modification_intensity" : selected_aa_dict[aa]["total_intensity"] - total_mod_intensity
+                    }  
+                for mod in mod_dict:
+                    dict_to_append["AA number"] = int(aa[2:])
+                    selected_aa_dict[aa]["percentage_" + mod] = 100*selected_aa_dict[aa]["total_modification_" + mod]/selected_aa_dict[aa]["total_peptides_covarage_w_repetitions"]
+                    dict_to_append["peptides_with_" + mod] = selected_aa_dict[aa]["total_modification_" + mod]
+                    dict_to_append["percentage_of_" + mod + "modification[%]"] = round(selected_aa_dict[aa]["percentage_" + mod],2)
+                    dict_to_append["intensity_" + mod] = round(selected_aa_dict[aa]["total_intensity_" + mod],2)
+                    if selected_aa_dict[aa]["total_intensity"]!= 0:
+                        dict_to_append["intensity_pecentage_" + mod + "[%]"] = round(100*(dict_to_append["intensity_" + mod]/selected_aa_dict[aa]["total_intensity"]),2)
+                    else:
+                        dict_to_append["intensity_pecentage_" + mod + "[%]"] = "NA"
+                entry = pd.DataFrame.from_dict(dict_to_append)
+                df_to_save = pd.concat([df_to_save, entry], ignore_index=True)
+            
+            elif self.analasys_type_selection == "Per peptide analysis":
                 for peptide_iter in selected_aa_dict[aa]["unique_peptides"].keys():
-                    phrase_to_search = aa[0:1] + str( 1+ int(aa[2:]) - selected_aa_dict[aa]["unique_peptides"][peptide_iter][0]) + "(" + mod + ")"
-                    selected_aa_dict[aa]["total_modification_" + mod] += len(df_to_analyze[(df_to_analyze["Sequence_upper"] == peptide_iter) & (df_to_analyze["Modifications"].str.contains(phrase_to_search,na=False,regex=False))])
-                    mod_intensity += sum(df_to_analyze[(df_to_analyze["Sequence_upper"] == peptide_iter) & (df_to_analyze["Modifications"].str.contains(phrase_to_search,na=False,regex=False))]["Intensity"])
-                total_mod_amount += selected_aa_dict[aa]["total_modification_" + mod]
-                selected_aa_dict[aa]["total_intensity_" + mod] = mod_intensity
-                total_mod_intensity += mod_intensity
-            selected_aa_dict[aa]["no_modification"] = selected_aa_dict[aa]["total_peptides_covarage_w_repetitions"] - total_mod_amount
-
-
-            dict_to_append = {"location_in_FASTA": [aa], 
-                "total_peptides": [selected_aa_dict[aa]["total_peptides_covarage_w_repetitions"]],
-                "total_unique_peptides": [selected_aa_dict[aa]["total_unique_peptides"]],
-                "total_intensity":[selected_aa_dict[aa]["total_intensity"]],
-                "peptides_with_no_modification":[selected_aa_dict[aa]["no_modification"]],
-                "no_modification_intensity" : selected_aa_dict[aa]["total_intensity"] - total_mod_intensity
-                }  
-            for mod in mod_dict:
-                dict_to_append["AA number"] = int(aa[2:])
-                selected_aa_dict[aa]["percentage_" + mod] = 100*selected_aa_dict[aa]["total_modification_" + mod]/selected_aa_dict[aa]["total_peptides_covarage_w_repetitions"]
-                dict_to_append["peptides_with_" + mod] = selected_aa_dict[aa]["total_modification_" + mod]
-                dict_to_append["percentage_of_" + mod + "modification[%]"] = round(selected_aa_dict[aa]["percentage_" + mod],2)
-                dict_to_append["intensity_" + mod] = round(selected_aa_dict[aa]["total_intensity_" + mod],2)
-                if selected_aa_dict[aa]["total_intensity"]!= 0:
-                    dict_to_append["intensity_pecentage_" + mod + "[%]"] = round(100*(dict_to_append["intensity_" + mod]/selected_aa_dict[aa]["total_intensity"]),2)
-                else:
-                    dict_to_append["intensity_pecentage_" + mod + "[%]"] = "NA"
-            
-            
-            entry = pd.DataFrame.from_dict(dict_to_append)
-            df_to_save = pd.concat([df_to_save, entry], ignore_index=True)
+                    selected_aa_dict[aa]["total_peptides_covarage_w_repetitions"] = len(df_to_analyze[df_to_analyze["Sequence_upper"] == peptide_iter])
+                    selected_aa_dict[aa]["total_intensity"] = sum(df_to_analyze[df_to_analyze["Sequence_upper"] == peptide_iter]["Intensity"].tolist())
+                    dict_to_append = {"location_in_FASTA": [aa], 
+                        "total_peptides": len(df_to_analyze[df_to_analyze["Sequence_upper"] == peptide_iter]),
+                        "peptide": peptide_iter,
+                        "total_unique_peptides": 1,
+                        "total_intensity":sum(df_to_analyze[df_to_analyze["Sequence_upper"] == peptide_iter]["Intensity"].tolist())
+                        }  
+                    total_mod_amount = 0
+                    total_mod_intensity = 0
+                    for mod in mod_dict:
+                        phrase_to_search = aa[0:1] + str( 1+ int(aa[2:]) - selected_aa_dict[aa]["unique_peptides"][peptide_iter][0]) + "(" + mod + ")"
+                        selected_aa_dict[aa]["total_intensity_" + mod] = sum(df_to_analyze[(df_to_analyze["Sequence_upper"] == peptide_iter) & (df_to_analyze["Modifications"].str.contains(phrase_to_search,na=False,regex=False))]["Intensity"])
+                        selected_aa_dict[aa]["total_modification_" + mod] = len(df_to_analyze[(df_to_analyze["Sequence_upper"] == peptide_iter) & (df_to_analyze["Modifications"].str.contains(phrase_to_search,na=False,regex=False))])
+                        dict_to_append["AA number"] = int(aa[2:])
+                        selected_aa_dict[aa]["percentage_" + mod] = 100*selected_aa_dict[aa]["total_modification_" + mod]/selected_aa_dict[aa]["total_peptides_covarage_w_repetitions"]
+                        total_mod_amount += selected_aa_dict[aa]["total_modification_" + mod]
+                        dict_to_append["peptides_with_" + mod] = selected_aa_dict[aa]["total_modification_" + mod]
+                        dict_to_append["percentage_of_" + mod + "modification[%]"] = round(selected_aa_dict[aa]["percentage_" + mod],2)
+                        dict_to_append["intensity_" + mod] = round(selected_aa_dict[aa]["total_intensity_" + mod],2)
+                        selected_aa_dict[aa]["total_modification_" + mod] += len(df_to_analyze[(df_to_analyze["Sequence_upper"] == peptide_iter) & (df_to_analyze["Modifications"].str.contains(phrase_to_search,na=False,regex=False))])
+                        total_mod_intensity += selected_aa_dict[aa]["total_intensity_" + mod]
+                        if selected_aa_dict[aa]["total_intensity"]!= 0:
+                            dict_to_append["intensity_pecentage_" + mod + "[%]"] = round(100*(dict_to_append["intensity_" + mod]/selected_aa_dict[aa]["total_intensity"]),2)
+                        else:
+                            dict_to_append["intensity_pecentage_" + mod + "[%]"] = "NA"
+                    
+                    dict_to_append["peptides_with_no_modification"] =  selected_aa_dict[aa]["total_peptides_covarage_w_repetitions"] - total_mod_amount
+                    dict_to_append["no_modification_intensity"] = selected_aa_dict[aa]["total_intensity"] - total_mod_intensity
+                    entry = pd.DataFrame.from_dict(dict_to_append)
+                    df_to_save = pd.concat([df_to_save, entry], ignore_index=True)
 
         df_to_save["percentage_of_no_modifications[%]"] = df_to_save.apply(lambda x: round(x["peptides_with_no_modification"]/x["total_peptides"]*100,2), axis=1)
         try:
             df_to_save["intensity_pecentage_no_modifications[%]"] = df_to_save.apply(lambda x: handle_devide_by_zero(x["no_modification_intensity"],x["total_intensity"]), axis=1)
         except ZeroDivisionError:
             df_to_save["intensity_pecentage_no_modifications[%]"] = "NA"
-        ordered_columns = ["AA number", "location_in_FASTA", "total_unique_peptides", "total_peptides", "peptides_with_no_modification"]
+        ordered_columns = ["AA number", "location_in_FASTA", "peptide", "total_unique_peptides", "total_peptides", "peptides_with_no_modification"]
         for mod in mod_dict:
             ordered_columns.append("peptides_with_" + mod)
         
@@ -335,7 +399,7 @@ class UI:
             return os.path.dirname(file_name + sample_name + "_" +self.uniprot_id + "_output.csv")
         else:
             file_name = os.path.basename(self.file_path_input)
-            df_to_save.to_csv(self.file_output_path +"/" + os.path.splitext(file_name)[0] + sample_name + "_" +self.uniprot_id + "_output.csv", index = False)
+            df_to_save.to_csv(self.file_output_path +"/" + os.path.splitext(file_name)[0] + sample_name + "_" +self.uniprot_id +"_" + self.analasys_type_selection +  "_output.csv", index = False)
             return self.file_output_path
         
 
@@ -347,10 +411,7 @@ class UI:
 
 def main():
     tk_ui = UI()
-    # tk_ui.select_file()
-    #print(tk_ui.file_path)
     tk_ui.root.mainloop()
-    #UI.root.mainloop()
 
 if __name__ == "__main__":
     main()
