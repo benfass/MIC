@@ -9,7 +9,7 @@ Required Python libraries: tkinter, pandas, numpy, requests
 
 
 # How to use the script
-download from Release tab (https://github.com/benfass/ProteoMIC/releases/tag/v2.0) the latest EXE file run the sorce code using python IDE/cmd propmt
+download from Release tab (https://github.com/benfass/ProteoMIC/releases/tag/v3.0) the latest EXE file run the sorce code using python IDE/cmd propmt
 
 # GUI instructions
 1) Select Proteome Discoverer/Metamorpheus output file to analyse
